@@ -131,11 +131,8 @@ class DatasetChunker(Chunker):
     def chunk_directory(self, path: Path):
         from tqdm import tqdm
         dataset = []
-        for thing in tqdm(sorted(path.rglob("*"))):
+        for thing in tqdm(sorted(path.rglob("*")), desc="Chunking data"):
             if thing.is_file():
                 dataset.extend(self.chunk_file(thing))
-        
-        return dataset
-        
 
-    
+        return dataset

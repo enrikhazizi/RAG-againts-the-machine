@@ -2826,6 +2826,7 @@ dependencies = [
     { name = "bm25s" },
     { name = "fire" },
     { name = "nltk" },
+    { name = "numpy" },
     { name = "pydantic" },
     { name = "vllm" },
 ]
@@ -2835,6 +2836,7 @@ requires-dist = [
     { name = "bm25s", specifier = ">=0.3.10" },
     { name = "fire", specifier = ">=0.7.1" },
     { name = "nltk", specifier = ">=3.10.3" },
+    { name = "numpy", specifier = ">=2.4.6" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "vllm", specifier = ">=0.27.1" },
 ]

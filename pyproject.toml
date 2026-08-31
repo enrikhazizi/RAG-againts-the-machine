@@ -8,6 +8,7 @@ dependencies = [
     "bm25s>=0.3.10",
     "fire>=0.7.1",
     "nltk>=3.10.3",
+    "numpy>=2.4.6",
     "pydantic>=2.13.4",
     "vllm>=0.27.1",
 ]

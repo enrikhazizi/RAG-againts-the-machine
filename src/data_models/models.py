@@ -9,6 +9,10 @@ class MinimalSource(BaseModel):
     last_character_index: int
 
 
+class FullSource(MinimalSource):
+    text: str
+
+
 class UnansweredQuestion(BaseModel):
     question_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     question: str
@@ -29,6 +33,10 @@ class MinimalSearchResults(BaseModel):
     retrieved_sources: List[MinimalSource]
 
 
+class FullSearchResults(MinimalSearchResults):
+    retrieved_sources: List[FullSource]
+
+
 class MinimalAnswer(MinimalSearchResults):
     answer: str
 
@@ -43,5 +51,10 @@ class StudentSearchResultsAndAnswer(BaseModel):
     k: int
 
 
-class FullSource(MinimalSource):
-    text: str
+    "bm25s>=0.3.10",
+    "fire>=0.7.1",
+    "nltk>=3.10.3",
+    "numpy>=2.4.6",
+    "pydantic>=2.13.4",
+    "pystemmer>=3.1.0",
+    "vllm>=0.27.1; sys_platform == 'linux'",

@@ -3,15 +3,15 @@ name = "rag-againts-the-machine"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "bm25s>=0.3.10",
     "fire>=0.7.1",
     "nltk>=3.10.3",
-    "numpy>=2.4.6",
-    "pydantic>=2.13.4",
+    "numpy>=2.2.6",
+    "pydantic>=2.13.5",
     "pystemmer>=3.1.0",
-    "vllm>=0.27.1; sys_platform == 'linux'",
+    "vllm>=0.11.0",
 ]
 
 [tool.uv]

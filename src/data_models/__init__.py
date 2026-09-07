@@ -1,7 +1,7 @@
 from .models import (
     MinimalSource, AnsweredQuestion,
     UnansweredQuestion, RagDataset,
-    MinimalSearchResults, MinimalAnswer,
+    MinimalSearchResults, FullSearchResults, MinimalAnswer,
     StudentSearchResults, StudentSearchResultsAndAnswer,
     FullSource,
                      )
@@ -9,7 +9,7 @@ from .models import (
 __all__ = [
     "MinimalSource", "AnsweredQuestion",
     "UnansweredQuestion", "RagDataset",
-    "MinimalSearchResults", "MinimalAnswer",
+    "MinimalSearchResults", "FullSearchResults", "MinimalAnswer",
     "StudentSearchResults", "StudentSearchResultsAndAnswer",
     "FullSource"
            ]

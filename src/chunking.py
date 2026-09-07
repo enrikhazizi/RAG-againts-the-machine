@@ -40,36 +40,45 @@ class Chunker(BaseModel):
         chunks = []
         starts = self.line_start(text)
         lines = text.splitlines()
+        def_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
         for node in tree.body:
-            if not isinstance(
-                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
+            if isinstance(node, def_types):
+                start_char = starts[self.real_start_line(node) - 1]
+                end_char = starts[node.end_lineno]
+
+                if end_char - start_char <= max_chunk:
+                    chunks.append((start_char, end_char, text[start_char:end_char]))
+
+                elif isinstance(node, ast.ClassDef):
+                    header = lines[node.lineno - 1]
+                    # -1 for the "\n" between header and method
+                    budget = max_chunk - len(header) - 1
+                    method_types = (ast.FunctionDef, ast.AsyncFunctionDef)
+                    for child in node.body:
+                        if isinstance(child, method_types):
+                            m_start = starts[self.real_start_line(child) - 1]
+                            m_end = starts[child.end_lineno]
+                            if m_end - m_start <= budget:
+                                chunk_text = header + "\n" + text[m_start:m_end]
+                                chunks.append((m_start, m_end, chunk_text))
+                            else:
+                                chunks.extend(
+                                    self._hard_cut(text, m_start, m_end, max_chunk)
+                                )
+
+                else:  # a huge plain function: never drop content
+                    chunks.extend(self._hard_cut(text, start_char, end_char, max_chunk))
                 continue
 
-            start_char = starts[self.real_start_line(node) - 1]
+            start_char = starts[node.lineno - 1]
             end_char = starts[node.end_lineno]
-
+            chunk_text = text[start_char:end_char]
+            if not chunk_text.strip():
+                continue
             if end_char - start_char <= max_chunk:
-                chunk_text = text[start_char:end_char]
                 chunks.append((start_char, end_char, chunk_text))
-
-            elif isinstance(node, ast.ClassDef):
-                header = lines[node.lineno - 1]
-                # -1 for the "\n" between header and method
-                budget = max_chunk - len(header) - 1
-                method_types = (ast.FunctionDef, ast.AsyncFunctionDef)
-                for child in node.body:
-                    if isinstance(child, method_types):
-                        m_start = starts[self.real_start_line(child) - 1]
-                        m_end = starts[child.end_lineno]
-                        if m_end - m_start <= budget:
-                            chunk_text = header + "\n" + text[m_start:m_end]
-                            chunks.append((m_start, m_end, chunk_text))
-                        else:
-                            chunks.extend(self._hard_cut(text, m_start, m_end, max_chunk))
-
-            else:  # a huge plain function: never drop content
+            else:
                 chunks.extend(self._hard_cut(text, start_char, end_char, max_chunk))
 
         return chunks
@@ -131,6 +140,7 @@ class DatasetChunker(Chunker):
     def chunk_directory(self, path: Path):
         from tqdm import tqdm
         dataset = []
+
         for thing in tqdm(sorted(path.rglob("*")),
                           unit=" files", desc="Chunking: "):
             if thing.is_file():

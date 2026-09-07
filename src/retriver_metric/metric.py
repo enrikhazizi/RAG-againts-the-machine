@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+
 class Metric_tester(BaseModel):
     total_doc: int = Field(ge=0)
     total_relevant: int = Field(ge=0)

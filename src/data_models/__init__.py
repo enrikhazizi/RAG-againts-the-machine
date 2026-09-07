@@ -1,15 +1,26 @@
+"""Pydantic models exchanged between RAG pipeline stages."""
 from .models import (
-    MinimalSource, AnsweredQuestion,
-    UnansweredQuestion, RagDataset,
-    MinimalSearchResults, FullSearchResults, MinimalAnswer,
-    StudentSearchResults, StudentSearchResultsAndAnswer,
+    AnsweredQuestion,
+    FullSearchResults,
     FullSource,
-                     )
+    MinimalAnswer,
+    MinimalSearchResults,
+    MinimalSource,
+    RagDataset,
+    StudentSearchResults,
+    StudentSearchResultsAndAnswer,
+    UnansweredQuestion,
+)
 
 __all__ = [
-    "MinimalSource", "AnsweredQuestion",
-    "UnansweredQuestion", "RagDataset",
-    "MinimalSearchResults", "FullSearchResults", "MinimalAnswer",
-    "StudentSearchResults", "StudentSearchResultsAndAnswer",
-    "FullSource"
-           ]
+    "AnsweredQuestion",
+    "FullSearchResults",
+    "FullSource",
+    "MinimalAnswer",
+    "MinimalSearchResults",
+    "MinimalSource",
+    "RagDataset",
+    "StudentSearchResults",
+    "StudentSearchResultsAndAnswer",
+    "UnansweredQuestion",
+]

@@ -1,9 +1,9 @@
 [project]
 name = "rag-againts-the-machine"
 version = "0.1.0"
-description = "Add your description here"
+description = "BM25 RAG pipeline over the vLLM 0.10.1 corpus for 42"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "bm25s>=0.3.10",
     "fire>=0.7.1",

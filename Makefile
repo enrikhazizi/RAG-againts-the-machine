@@ -5,11 +5,17 @@ run:
 	uv run python -m src
 
 debug:
-	uv run python -m pdb src
+	uv run python -m pdb -m src
 
 lint:
-	flake8 src
-	mypy
+	uv tool run flake8 src
+	uv tool run mypy src --warn-return-any --warn-unused-ignores \
+		--ignore-missing-imports --disallow-untyped-defs \
+		--check-untyped-defs
+
+lint-strict:
+	uv tool run flake8 src
+	uv tool run mypy src --strict --ignore-missing-imports
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +

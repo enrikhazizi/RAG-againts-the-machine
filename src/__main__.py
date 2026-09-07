@@ -1,10 +1,11 @@
-from vllm import LLM, SamplingParams
 from data_models import (FullSource, UnansweredQuestion,
                          RagDataset, StudentSearchResults,
                          MinimalSource, MinimalSearchResults,
-                         StudentSearchResultsAndAnswer)
+                         StudentSearchResultsAndAnswer, MinimalAnswer,
+                         )
 from chunking import DatasetChunker
 from bm25s.tokenization import Tokenizer
+from ollama import generate
 from pathlib import Path
 from tqdm import tqdm
 from typing import List
@@ -54,25 +55,22 @@ def _as_question(query: UnansweredQuestion | str) -> UnansweredQuestion:
 
 def _load_json(path: Path) -> RagDataset:
     path = Path(path)
-    with open(path, "r", encoding="utf-8") as f:
-        json_file = json.load(f)
-    questions = [
-        UnansweredQuestion(
-            question_id=data["question_id"],
-            question=data["question"],
+    files = sorted(path.glob("*.json")) if path.is_dir() else [path]
+    questions = []
+    for file in files:
+        with open(file, "r", encoding="utf-8") as f:
+            json_file = json.load(f)
+        questions.extend(
+            UnansweredQuestion(
+                question_id=data["question_id"],
+                question=data["question"],
+            )
+            for data in json_file["rag_questions"]
         )
-        for data in json_file["rag_questions"]
-    ]
     return RagDataset(rag_questions=questions)
 
 
 class Rag():
-
-    llm = LLM(model="Qwen/Qwen3-0.6B", avx512f)
-    sampling_params = SamplingParams(
-        temperature=0.2,
-        max_tokens=256
-        )
 
     def index(self, max_chunk_size=2000):
         chunker = DatasetChunker(max_chunk=max_chunk_size)
@@ -143,8 +141,7 @@ class Rag():
         dataset_path: Path,
         k: int = 5,
         path: Path = INDEX_DIR,
-        save_directory: Path = SEARCH_OUT_DIR,
-        write: bool = True
+        save_directory: Path = SEARCH_OUT_DIR
     ) -> List[MinimalSearchResults] | None:
         dataset = _load_json(Path(dataset_path))
         retriever = bm25s.BM25.load(path, load_corpus=True)
@@ -168,11 +165,9 @@ class Rag():
         output = StudentSearchResults(search_results=results, k=k)
         save_directory = Path(save_directory)
         save_directory.mkdir(parents=True, exist_ok=True)
-        out_file = save_directory / Path(dataset_path).name
+        out_file = save_directory / "result.json"
         out_file.write_text(output.model_dump_json(indent=2), encoding="utf-8")
         print(f"Wrote {out_file}")
-        if write:
-            return results
 
     def augument(self, query: str, k: int = 5, path: Path = INDEX_DIR) -> str:
         question = _as_question(query)
@@ -203,16 +198,33 @@ class Rag():
             "- path [start:end]\n"
         )
 
-    def answer(self, query: str, k: int):
+    def answer(self, query: str, k: int = 5):
         question = self.augument(query, k)
-        ans = self.llm.generate(prompts=question, sampling_params=self.sampling_params)
-        print(ans)
+        response = generate(
+                model="Qwen3:0.6b",
+                prompt=question
+            )
+        print(response.response)
 
-    def answer_dataset(self, question_path: Path = QUERY_DIR, k: int = 5, path: Path = INDEX_DIR) -> StudentSearchResultsAndAnswer:
-        ans = []
-        dataset = _load_json(question_path)
-        for question in dataset.rag_questions:
-            print(question)
+    def answer_dataset(self, student_search_results_path: Path, k: int = 5):
+        result = []
+        path = Path(student_search_results_path)
+        results = StudentSearchResults.model_validate_json(path.read_text(encoding="utf-8"))
+        for item in tqdm(results.search_results):
+            ans = generate(
+                model="Qwen3:0.6b",
+                prompt=self.augument(item.question, k),
+                think=False
+            )
+            result.extend(
+                MinimalAnswer(
+                    question_id=item.question_id,
+                    question=item.question,
+                    answer=ans.response,
+                    retrieved_sources=item.retrieved_sources
+                )
+            )
+        print(result)
 
 
 def main() -> None:

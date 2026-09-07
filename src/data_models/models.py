@@ -49,12 +49,3 @@ class StudentSearchResults(BaseModel):
 class StudentSearchResultsAndAnswer(BaseModel):
     search_results: List[MinimalAnswer]
     k: int
-
-
-    "bm25s>=0.3.10",
-    "fire>=0.7.1",
-    "nltk>=3.10.3",
-    "numpy>=2.4.6",
-    "pydantic>=2.13.4",
-    "pystemmer>=3.1.0",
-    "vllm>=0.27.1; sys_platform == 'linux'",

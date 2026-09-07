@@ -34,7 +34,7 @@ SAVE_ANS = Path(
 MODEL = "Qwen3:0.6b"
 IOU_THRESHOLD = 0.05
 RECALL_KS = (1, 3, 5, 10)
-RETRIEVE_OVERSAMPLE = 50
+RETRIEVE_OVERSAMPLE = 150
 
 
 def _tokenizer() -> Tokenizer:
@@ -71,6 +71,64 @@ def code_split(text: str) -> list[str]:
     return tokens
 
 
+def _path_token_text(path: str) -> str:
+    """Turn a corpus path into extra BM25 tokens.
+
+    Args:
+        path: File path stored on a chunk.
+
+    Returns:
+        Space-separated path pieces usable as query/index text.
+    """
+    return (
+        Path(path).as_posix()
+        .replace("/", " ")
+        .replace("-", " ")
+        .replace("_", " ")
+    )
+
+
+def _query_for_retrieval(question: str) -> str:
+    """Build a retrieval query enriched with path-like hints.
+
+    Args:
+        question: Raw natural-language question.
+
+    Returns:
+        Text passed to the BM25 tokenizer at query time.
+    """
+    lower = question.lower()
+    hints: list[str] = []
+    if "cli" in lower:
+        hints.extend(["docs", "cli"])
+    if "cmake" in lower:
+        hints.append("cmake")
+    hints.extend(t for t in code_split(question) if len(t) >= 4)
+    if not hints:
+        return question
+    return question + " " + " ".join(hints)
+
+
+def _overlap_score(question: str, file_path: str, text: str) -> float:
+    """Share of query terms present in a chunk path or body.
+
+    Args:
+        question: Natural-language question.
+        file_path: Chunk path.
+        text: Chunk text.
+
+    Returns:
+        Overlap ratio in ``[0, 1]``.
+    """
+    query_terms = set(code_split(question))
+    if not query_terms:
+        return 0.0
+    doc_terms = set(
+        code_split(_path_token_text(file_path) + " " + text)
+    )
+    return len(query_terms & doc_terms) / len(query_terms)
+
+
 def _infer_source_kind(dataset_path: str | Path) -> str | None:
     """Guess docs vs code retrieval scope from a dataset file name.
 
@@ -102,7 +160,10 @@ def _source_allowed(file_path: str, kind: str | None) -> bool:
         return True
     path = Path(file_path)
     if kind == "docs":
-        return path.suffix == ".md" or path.name == "CMakeLists.txt"
+        return (
+            path.suffix == ".md"
+            or path.name in {"CMakeLists.txt", "setup.py"}
+        )
     if kind == "code":
         return path.suffix == ".py"
     return True
@@ -362,7 +423,7 @@ class Rag:
         tokenizer = _tokenizer()
         all_ids: list[Any] = []
         for chunk in tqdm(corpus, desc="Tokenizing chunks", unit=" chunk"):
-            path_words = Path(chunk["source"]).stem.replace("-", " ")
+            path_words = _path_token_text(chunk["source"])
             tokens = tokenizer.tokenize(
                 [path_words + " " + chunk["text"]],
                 update_vocab=True,
@@ -439,12 +500,12 @@ class Rag:
 
         try:
             query_tokens = _tokenizer().tokenize(
-                [query.question],
+                [_query_for_retrieval(query.question)],
                 update_vocab=True,
                 return_as="string",
                 show_progress=False,
             )
-            docs, _scores = retriever.retrieve(query_tokens, k=fetch_k)
+            docs, scores = retriever.retrieve(query_tokens, k=fetch_k)
         except Exception as exc:
             print(f"Retrieval failed: {exc}")
             return []
@@ -452,21 +513,34 @@ class Rag:
         if docs is None or len(docs) == 0:
             return []
 
-        retrieved: list[FullSource] = []
-        for doc in docs[0]:
+        ranked: list[tuple[float, dict[str, Any]]] = []
+        row = docs[0]
+        row_scores = scores[0] if scores is not None else []
+        for idx, doc in enumerate(row):
             if not isinstance(doc, dict):
                 continue
             file_path = _display_path(str(doc.get("source", "")))
             if not _source_allowed(file_path, source_kind):
                 continue
+            bm25 = float(row_scores[idx]) if idx < len(row_scores) else 0.0
+            overlap = _overlap_score(
+                query.question,
+                file_path,
+                str(doc.get("text", "")),
+            )
+            ranked.append((bm25 + overlap, doc))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+
+        retrieved: list[FullSource] = []
+        for _score, doc in ranked[:k]:
+            file_path = _display_path(str(doc.get("source", "")))
             retrieved.append(FullSource(
                 file_path=file_path,
                 first_character_index=int(doc.get("start", 0)),
                 last_character_index=int(doc.get("end", 0)),
                 text=str(doc.get("text", "")),
             ))
-            if len(retrieved) >= k:
-                break
         return retrieved
 
     def search(

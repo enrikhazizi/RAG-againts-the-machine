@@ -18,7 +18,7 @@ import bm25s
 INDEX_DIR = Path("data/processed/vllm")
 QUERY_DIR = Path("data/dataset/UnansweredQuestions")
 SEARCH_OUT_DIR = Path("data/output/search_results")
-
+SAVE_ANS = Path("data/output/search_result_and_answer")
 
 def _tokenizer() -> Tokenizer:
     return Tokenizer(stemmer=Stemmer.Stemmer("english"), stopwords=[], splitter=code_split)
@@ -206,7 +206,7 @@ class Rag():
             )
         print(response.response)
 
-    def answer_dataset(self, student_search_results_path: Path, k: int = 5):
+    def answer_dataset(self, student_search_results_path: Path = SEARCH_OUT_DIR, save_directory: Path = SAVE_ANS, k: int = 5):
         result = []
         path = Path(student_search_results_path)
         results = StudentSearchResults.model_validate_json(path.read_text(encoding="utf-8"))
@@ -224,7 +224,13 @@ class Rag():
                     retrieved_sources=item.retrieved_sources
                 )
             )
-        print(result)
+
+        output = StudentSearchResultsAndAnswer(search_results=results, k=k)
+        save_directory = Path(save_directory)
+        save_directory.mkdir(parents=True, exist_ok=True)
+        out_file = save_directory / "results.json"
+        out_file.write_text(output.model_dump_json(indent=2), encoding="utf-8")
+        
 
 
 def main() -> None:

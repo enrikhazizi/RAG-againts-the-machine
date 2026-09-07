@@ -19,6 +19,8 @@ INDEX_DIR = Path("data/processed/vllm")
 QUERY_DIR = Path("data/dataset/UnansweredQuestions")
 SEARCH_OUT_DIR = Path("data/output/search_results")
 SAVE_ANS = Path("data/output/search_result_and_answer")
+MODEL = "Qwen3:0.6b"
+
 
 def _tokenizer() -> Tokenizer:
     return Tokenizer(stemmer=Stemmer.Stemmer("english"), stopwords=[], splitter=code_split)
@@ -165,22 +167,25 @@ class Rag():
         output = StudentSearchResults(search_results=results, k=k)
         save_directory = Path(save_directory)
         save_directory.mkdir(parents=True, exist_ok=True)
-        out_file = save_directory / "result.json"
+        out_file = save_directory / Path(dataset_path).name
         out_file.write_text(output.model_dump_json(indent=2), encoding="utf-8")
         print(f"Wrote {out_file}")
 
-    def augument(self, query: str, k: int = 5, path: Path = INDEX_DIR) -> str:
-        question = _as_question(query)
-        chunks = self._retrieve(question, k=k, path=path)
-        if not chunks:
-            context = "(no chunks retrieved — index may be missing)"
-        else:
-            context = "\n\n".join(
+    def _sources_text(self, sources: List[MinimalSource]) -> str:
+        parts = []
+        for src in sources:
+            text = Path(src.file_path).read_text(encoding="utf-8", errors="replace")
+            chunk = text[src.first_character_index:src.last_character_index]
+            parts.append(
                 f"{src.file_path} "
                 f"[{src.first_character_index}:{src.last_character_index}]\n"
-                f"{src.text}"
-                for src in chunks
+                f"{chunk}"
             )
+        return "\n\n".join(parts)
+
+    def _prompt(self, question: str, context: str) -> str:
+        if not context:
+            context = "(no chunks retrieved — index may be missing)"
         return (
             "You are answering questions about the vLLM codebase "
             "from retrieved source chunks.\n"
@@ -190,7 +195,7 @@ class Rag():
             "- If the chunks do not contain enough evidence, say so "
             "and answer only what they support.\n"
             "- Cite every claim with file path and character range [start:end].\n"
-            f"<question>\n{question.question}\n</question>\n"
+            f"<question>\n{question}\n</question>\n"
             f"<retrieved_chunks>\n{context}\n</retrieved_chunks>\n"
             "Response format:\n"
             "Answer: <your answer>\n"
@@ -198,39 +203,56 @@ class Rag():
             "- path [start:end]\n"
         )
 
-    def answer(self, query: str, k: int = 5):
-        question = self.augument(query, k)
+    def augument(self, query: str, k: int = 5, path: Path = INDEX_DIR) -> str:
+        question = _as_question(query)
+        chunks = self._retrieve(question, k=k, path=path)
+        context = "\n\n".join(
+            f"{src.file_path} "
+            f"[{src.first_character_index}:{src.last_character_index}]\n"
+            f"{src.text}"
+            for src in chunks
+        )
+        return self._prompt(question.question, context)
+
+    def _generate(self, prompt: str) -> str:
         response = generate(
-                model="Qwen3:0.6b",
-                prompt=question
-            )
-        print(response.response)
+            model=MODEL,
+            prompt=prompt,
+            think=False,
+            options={"num_predict": 256},
+        )
+        return response.response
 
-    def answer_dataset(self, student_search_results_path: Path = SEARCH_OUT_DIR, save_directory: Path = SAVE_ANS, k: int = 5):
-        result = []
+    def answer(self, query: str, k: int = 5):
+        print(self._generate(self.augument(query, k)))
+
+    def answer_dataset(
+        self,
+        student_search_results_path: Path = SEARCH_OUT_DIR / "dataset_docs_public.json",
+        save_directory: Path = SAVE_ANS,
+    ):
         path = Path(student_search_results_path)
-        results = StudentSearchResults.model_validate_json(path.read_text(encoding="utf-8"))
-        for item in tqdm(results.search_results):
-            ans = generate(
-                model="Qwen3:0.6b",
-                prompt=self.augument(item.question, k),
-                think=False
+        results = StudentSearchResults.model_validate_json(
+            path.read_text(encoding="utf-8")
+        )
+        answers: list[MinimalAnswer] = []
+        for item in tqdm(results.search_results, desc="Answering"):
+            prompt = self._prompt(
+                item.question, self._sources_text(item.retrieved_sources)
             )
-            result.extend(
-                MinimalAnswer(
-                    question_id=item.question_id,
-                    question=item.question,
-                    answer=ans.response,
-                    retrieved_sources=item.retrieved_sources
-                )
-            )
+            answers.append(MinimalAnswer(
+                question_id=item.question_id,
+                question=item.question,
+                answer=self._generate(prompt),
+                retrieved_sources=item.retrieved_sources,
+            ))
 
-        output = StudentSearchResultsAndAnswer(search_results=results, k=k)
+        output = StudentSearchResultsAndAnswer(search_results=answers, k=results.k)
         save_directory = Path(save_directory)
         save_directory.mkdir(parents=True, exist_ok=True)
-        out_file = save_directory / "results.json"
+        out_file = save_directory / path.name
         out_file.write_text(output.model_dump_json(indent=2), encoding="utf-8")
-        
+        print(f"Wrote {out_file}")
 
 
 def main() -> None:
